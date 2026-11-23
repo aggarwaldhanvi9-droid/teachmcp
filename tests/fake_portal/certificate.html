@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Certificate Request</title></head>
+  <body>
+    <h1>Certificate Request</h1>
+    <form id="cert-form" method="post" action="/certificate">
+      <label for="cert-type">Certificate Type</label>
+      <select id="cert-type" name="cert_type" aria-label="Certificate Type">
+        <option>Bonafide</option>
+        <option>No Dues</option>
+        <option>Character</option>
+      </select>
+      <label for="reason">Reason</label>
+      <textarea id="reason" name="reason" aria-label="Reason"></textarea>
+      <button id="submit-btn" type="submit">Submit Request</button>
+    </form>
+  </body>
+</html>
