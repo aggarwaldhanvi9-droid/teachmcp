@@ -1,0 +1,72 @@
+{
+  "name": "request_certificate",
+  "description": "Submits a certificate request on the college portal (for example a bonafide certificate) and returns the reference number from the confirmation page.",
+  "base_url": "http://localhost:5000",
+  "params": {
+    "certificate_type": {
+      "type": "string",
+      "description": "Type of certificate to request",
+      "enum": ["Bonafide", "No Dues", "Character"],
+      "required": true
+    },
+    "reason": {
+      "type": "string",
+      "description": "Reason for the request, for example 'scholarship application'",
+      "required": true
+    }
+  },
+  "steps": [
+    {
+      "action": "goto",
+      "description": "Open the certificate request form",
+      "value": "/certificate"
+    },
+    {
+      "action": "select",
+      "description": "Choose the certificate type",
+      "selectors": [
+        "#cert-type",
+        "select[name=cert_type]",
+        "role=combobox[name='Certificate Type']"
+      ],
+      "value": "{certificate_type}"
+    },
+    {
+      "action": "fill",
+      "description": "Type the reason",
+      "selectors": [
+        "#reason",
+        "textarea[name=reason]",
+        "role=textbox[name='Reason']"
+      ],
+      "value": "{reason}"
+    },
+    {
+      "action": "click",
+      "description": "Click Submit Request",
+      "selectors": [
+        "#submit-btn",
+        "button[type=submit]",
+        "text=Submit Request",
+        "role=button[name='Submit Request']"
+      ]
+    },
+    {
+      "action": "extract",
+      "description": "Read the reference number from the confirmation page",
+      "selectors": [
+        "#ref-number",
+        "text=/CERT-\\d+/"
+      ],
+      "extract_as": "text",
+      "save_as": "reference_number"
+    }
+  ],
+  "success_check": {
+    "type": "text_visible",
+    "value": "Request submitted"
+  },
+  "outputs": ["reference_number"],
+  "irreversible": true,
+  "approved": true
+}

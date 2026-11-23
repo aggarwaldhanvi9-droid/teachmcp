@@ -1,0 +1,31 @@
+{
+  "name": "check_attendance",
+  "description": "Reads the student's attendance table from the college portal and returns each subject with its attendance percentage.",
+  "base_url": "http://localhost:5000",
+  "params": {},
+  "steps": [
+    {
+      "action": "goto",
+      "description": "Open the attendance page",
+      "value": "/attendance"
+    },
+    {
+      "action": "extract",
+      "description": "Read the attendance table",
+      "selectors": [
+        "#attendance-table",
+        "table.attendance",
+        "role=table"
+      ],
+      "extract_as": "table",
+      "save_as": "attendance"
+    }
+  ],
+  "success_check": {
+    "type": "output_nonempty",
+    "value": "attendance"
+  },
+  "outputs": ["attendance"],
+  "irreversible": false,
+  "approved": true
+}
