@@ -1,0 +1,69 @@
+{
+  "name": "submit_certificate_request",
+  "description": "Submits a certificate request by providing a reason and returns the confirmation heading text.",
+  "base_url": "http://localhost:5000",
+  "params": {
+    "reason": {
+      "type": "string",
+      "description": "Reason for the certificate request",
+      "enum": null,
+      "required": true
+    }
+  },
+  "steps": [
+    {
+      "action": "goto",
+      "description": "Open the certificate request page",
+      "selectors": [],
+      "value": "/certificate",
+      "extract_as": null,
+      "save_as": null
+    },
+    {
+      "action": "fill",
+      "description": "Fill Reason",
+      "selectors": [
+        "#reason",
+        "role=textbox[name=\"Reason\"]",
+        "textarea[name=\"reason\"]",
+        "textarea"
+      ],
+      "value": "{reason}",
+      "extract_as": null,
+      "save_as": null
+    },
+    {
+      "action": "click",
+      "description": "Click Submit Request",
+      "selectors": [
+        "#submit-btn",
+        "role=button[name=\"Submit Request\"]",
+        "text=\"Submit Request\"",
+        "button[type=\"submit\"]",
+        "button"
+      ],
+      "value": null,
+      "extract_as": null,
+      "save_as": null
+    },
+    {
+      "action": "extract",
+      "description": "Extract confirmation heading",
+      "selectors": [
+        "h2"
+      ],
+      "value": null,
+      "extract_as": "text",
+      "save_as": "extracted_text_1"
+    }
+  ],
+  "success_check": {
+    "type": "output_nonempty",
+    "value": "extracted_text_1"
+  },
+  "outputs": [
+    "extracted_text_1"
+  ],
+  "irreversible": false,
+  "approved": true
+}
