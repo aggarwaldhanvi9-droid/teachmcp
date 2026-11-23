@@ -11,6 +11,12 @@ from playwright.sync_api import sync_playwright
 
 from models import ToolSpec, fill_value
 from verify import verify
+from audit import log_run
+
+
+def _log_result(spec: ToolSpec, args: dict, result: dict) -> dict:
+    log_run(spec.name, args, result)
+    return result
 
 
 def _error(message: str, **extra: Any) -> dict:
@@ -111,7 +117,10 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
         args = {}
     validation_error = _validate_args(spec, args)
     if validation_error:
-        return _error(validation_error)
+        result = _error(validation_error)
+        tool_name = spec.name if isinstance(spec, ToolSpec) else "unknown"
+        log_run(tool_name, args, result)
+        return result
 
     base_result = {
         "status": "error",
@@ -135,7 +144,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
             }
             for index, step in enumerate(spec.steps, 1)
         ]
-        return base_result
+        return _log_result(spec, args, base_result)
 
     planned_steps = []
     for index, step in enumerate(spec.steps, 1):
@@ -226,7 +235,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                 base_result["evidence"] = {"url": page.url, "error": str(exc)}
                 page.screenshot(path=str(screenshot_path), full_page=True)
                 base_result["screenshot"] = screenshot_path.as_posix()
-                return base_result
+                return _log_result(spec, args, base_result)
 
             step_results.append(step_result)
 
@@ -249,7 +258,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
         base_result["status"] = "verified" if passed else "failed"
         if not passed:
             base_result["failed_step"] = "success_check"
-        return base_result
+        return _log_result(spec, args, base_result)
     except Exception as exc:
         base_result["status"] = "error"
         base_result["outputs"] = outputs
@@ -263,7 +272,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                 base_result["screenshot"] = screenshot_path.as_posix()
             except Exception:
                 pass
-        return base_result
+        return _log_result(spec, args, base_result)
     finally:
         if context:
             context.close()
