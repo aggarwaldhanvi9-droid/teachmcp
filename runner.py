@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import time
+import json
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,108 @@ from audit import log_run
 def _log_result(spec: ToolSpec, args: dict, result: dict) -> dict:
     log_run(spec.name, args, result)
     return result
+
+
+def _interactive_dom(page: Any, limit: int = 3000) -> str:
+    try:
+        snippet = page.evaluate(
+            """() => {
+                const elements = [...document.querySelectorAll(
+                    'button,input,select,textarea,a,[role=\"button\"]'
+                )].slice(0, 40);
+                return elements.map((el, index) => {
+                    const attrs = [];
+                    for (const name of ['id','name','type','role','aria-label','class']) {
+                        const value = el.getAttribute(name);
+                        if (value) attrs.push(`${name}="${value}"`);
+                    }
+                    const text = (el.innerText || el.value || el.getAttribute('value') || '').trim();
+                    return `<${el.tagName.toLowerCase()} ${attrs.join(' ')}>${text}</${el.tagName.toLowerCase()}>`;
+                }).join('\\n');
+            }"""
+        )
+        return (snippet or "")[:limit]
+    except Exception:
+        return ""
+
+
+def _offline_repair(step: Any, failed_selectors: list[str], dom_snippet: str) -> dict:
+    suggested = None
+    action = step.action
+    for line in dom_snippet.splitlines():
+        lower = line.lower()
+        if action == "click" and (lower.startswith("<button") or 'role="button"' in lower):
+            match = re.search(r'id="([^"]+)"', line)
+            if match:
+                suggested = f"#{match.group(1)}"
+                break
+            match = re.search(r'name="([^"]+)"', line)
+            if match:
+                suggested = f"{line.split()[0][1:].split(' ')[0]}[name={match.group(1)}]"
+                break
+        if action == "fill" and "<textarea" in lower:
+            match = re.search(r'id="([^"]+)"', line)
+            if match:
+                suggested = f"#{match.group(1)}"
+                break
+        if action == "select" and "<select" in lower:
+            match = re.search(r'id="([^"]+)"', line)
+            if match:
+                suggested = f"#{match.group(1)}"
+                break
+
+    if suggested is None:
+        suggested = "NO_VALID_SELECTOR_FOUND"
+
+    return {
+        "step": step.description,
+        "failed_selectors": failed_selectors,
+        "suggested_selector": suggested,
+        "reason": "Offline fallback inferred a selector from the trimmed interactive DOM." if suggested != "NO_VALID_SELECTOR_FOUND" else "No unambiguous interactive element could be inferred from the page DOM.",
+    }
+
+
+def _propose_repair(step: Any, failed_selectors: list[str], dom_snippet: str) -> dict:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return _offline_repair(step, failed_selectors, dom_snippet)
+
+    prompt = (
+        "The following Playwright step selectors all failed.\n"
+        f"Step: {step.description}\n"
+        f"Action: {step.action}\n"
+        f"Failed selectors: {json.dumps(failed_selectors)}\n"
+        "Interactive DOM snippet:\n" + dom_snippet + "\n\n"
+        "Return only a JSON object with keys step, failed_selectors, "
+        "suggested_selector, and reason."
+    )
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=os.environ.get("ANTHROPIC_MODEL", "claude-3-5-haiku-latest"),
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(
+            block.text for block in getattr(response, "content", [])
+            if getattr(block, "type", None) == "text"
+        )
+        match = re.search(r"\{.*\}", text, re.S)
+        if not match:
+            raise ValueError("LLM response did not contain JSON")
+        suggestion = json.loads(match.group(0))
+        return {
+            "step": suggestion.get("step", step.description),
+            "failed_selectors": suggestion.get("failed_selectors", failed_selectors),
+            "suggested_selector": suggestion.get("suggested_selector", "NO_VALID_SELECTOR_FOUND"),
+            "reason": suggestion.get("reason", "Suggested by Anthropic."),
+        }
+    except Exception as exc:
+        fallback = _offline_repair(step, failed_selectors, dom_snippet)
+        fallback["reason"] += f" Anthropic unavailable: {type(exc).__name__}."
+        return fallback
 
 
 def _error(message: str, **extra: Any) -> dict:
@@ -232,7 +335,16 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                 base_result["failed_step"] = index
                 base_result["steps"] = step_results
                 base_result["outputs"] = {name: outputs[name] for name in spec.outputs if name in outputs}
-                base_result["evidence"] = {"url": page.url, "error": str(exc)}
+                failed_selectors = step.selectors if step.action in ("click", "fill", "select", "extract") else []
+                dom_snippet = _interactive_dom(page) if page else ""
+                base_result["evidence"] = {
+                    "url": page.url,
+                    "error": str(exc),
+                    "failed_step_description": step.description,
+                    "interactive_dom_snippet": dom_snippet,
+                }
+                if failed_selectors:
+                    base_result["repair_suggestion"] = _propose_repair(step, failed_selectors, dom_snippet)
                 page.screenshot(path=str(screenshot_path), full_page=True)
                 base_result["screenshot"] = screenshot_path.as_posix()
                 return _log_result(spec, args, base_result)
