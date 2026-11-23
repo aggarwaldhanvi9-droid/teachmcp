@@ -10,6 +10,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from models import ToolSpec, fill_value
+from verify import verify
 
 
 def _error(message: str, **extra: Any) -> dict:
@@ -93,20 +94,6 @@ def _extract_table(locator) -> list[dict]:
         if values:
             table.append({header: values[i] if i < len(values) else "" for i, header in enumerate(headers)})
     return table
-
-
-def _success_check(page, spec: ToolSpec, outputs: dict) -> bool:
-    check = spec.success_check
-    if check.type == "text_visible":
-        return page.get_by_text(check.value, exact=False).count() > 0
-    if check.type == "selector_visible":
-        return page.locator(check.value).count() > 0
-    if check.type == "url_contains":
-        return check.value in page.url
-    if check.type == "output_nonempty":
-        value = outputs.get(check.value)
-        return bool(value)
-    return False
 
 
 def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
@@ -244,7 +231,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
             step_results.append(step_result)
 
         returned_outputs = {name: outputs[name] for name in spec.outputs if name in outputs}
-        passed = _success_check(page, spec, outputs)
+        passed, verification_evidence = verify(spec.success_check, page, outputs)
         base_result["outputs"] = returned_outputs
         base_result["steps"] = step_results
         base_result["evidence"] = {
@@ -254,6 +241,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                 "type": spec.success_check.type,
                 "value": spec.success_check.value,
                 "passed": passed,
+                "evidence": verification_evidence,
             },
         }
         page.screenshot(path=str(screenshot_path), full_page=True)
