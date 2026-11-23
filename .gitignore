@@ -1,6 +1,10 @@
-.env
+﻿.venv/
 __pycache__/
 *.pyc
-.venv/
-venv/
-.pytest_cache/
+.env
+runs/
+recordings/*
+!recordings/.gitkeep
+specs_pending/*
+!specs_pending/.gitkeep
+.playwright-profile/
