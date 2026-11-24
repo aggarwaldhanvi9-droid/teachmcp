@@ -289,7 +289,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
     context = None
     browser = None
     p = None
-    slow_mo = 600 if headless else 1800
+    slow_mo = 600 if headless else 2000
     outputs: dict[str, Any] = {}
     step_results: list[dict] = []
 
@@ -312,6 +312,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
             browser = p.chromium.launch(headless=headless, slow_mo=slow_mo)
             context = browser.new_context(viewport={"width": 1280, "height": 800})
             page = context.new_page()
+        page.bring_to_front()
 
         for index, step in enumerate(spec.steps, 1):
             if step.selectors:
@@ -344,6 +345,14 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                     step_result["healed"] = healed
                     if healed:
                         _log(f"Selector fallback matched: {selector_used}")
+
+                    if step.action in ("fill", "click"):
+                        locator.evaluate(
+                            "el => el.style.outline = '3px solid red'"
+                        )
+                        locator.evaluate(
+                            "el => setTimeout(() => { el.style.outline = ''; }, 5000)"
+                        )
 
                     if step.action == "click":
                         locator.click()
@@ -386,6 +395,8 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
 
         returned_outputs = {name: outputs[name] for name in spec.outputs if name in outputs}
         passed, verification_evidence = verify(spec.success_check, page, outputs)
+        if not headless:
+            page.wait_for_timeout(3000)
         base_result["outputs"] = returned_outputs
         base_result["steps"] = step_results
         base_result["evidence"] = {
@@ -423,8 +434,6 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                 pass
         return _log_result(spec, args, base_result)
     finally:
-        if not headless and page and not page.is_closed():
-            page.wait_for_timeout(1500)
         if context:
             context.close()
         elif browser:
