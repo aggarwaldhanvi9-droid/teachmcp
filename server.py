@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +43,11 @@ def list_workflows() -> list[dict]:
     ]
 
 
-def run_workflow(name: str, params: dict[str, Any] | None = None, confirmed: bool = False) -> dict:
+async def run_workflow(
+    name: str,
+    params: dict[str, Any] | None = None,
+    confirmed: bool = False,
+) -> dict:
     """Run an approved workflow by name."""
     spec = SPEC_BY_NAME.get(name)
     if spec is None:
@@ -54,7 +60,9 @@ def run_workflow(name: str, params: dict[str, Any] | None = None, confirmed: boo
             "screenshot": None,
             "failed_step": None,
         }
-    return run_spec(spec, params or {}, confirmed=confirmed)
+    return await asyncio.to_thread(
+        run_spec, spec, params or {}, confirmed=confirmed
+    )
 
 
 mcp.tool()(list_workflows)
@@ -62,9 +70,47 @@ mcp.tool()(run_workflow)
 
 
 def _register_workflow_tool(spec) -> None:
-    def workflow(**kwargs):
+    parameter_types = {
+        "string": str,
+        "integer": int,
+        "number": float,
+        "boolean": bool,
+    }
+
+    async def workflow(**kwargs):
         confirmed = bool(kwargs.pop("confirmed", False))
-        return run_workflow(spec.name, kwargs, confirmed=confirmed)
+        return await run_workflow(spec.name, kwargs, confirmed=confirmed)
+
+    signature_parameters = []
+    annotations = {}
+    ordered_params = sorted(
+        spec.params.items(), key=lambda item: not item[1].required
+    )
+    for name, param in ordered_params:
+        annotation = parameter_types[param.type]
+        annotations[name] = annotation
+        signature_parameters.append(
+            inspect.Parameter(
+                name,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=inspect.Parameter.empty if param.required else None,
+                annotation=annotation,
+            )
+        )
+    signature_parameters.append(
+        inspect.Parameter(
+            "confirmed",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=False,
+            annotation=bool,
+        )
+    )
+    annotations["confirmed"] = bool
+    annotations["return"] = dict[str, Any]
+    workflow.__annotations__ = annotations
+    workflow.__signature__ = inspect.Signature(
+        signature_parameters, return_annotation=dict[str, Any]
+    )
 
     description = spec.description
     if spec.irreversible:
