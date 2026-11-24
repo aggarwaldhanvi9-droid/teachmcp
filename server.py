@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 import asyncio
 import inspect
 from pathlib import Path
