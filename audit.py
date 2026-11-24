@@ -40,6 +40,9 @@ def log_run(tool: str, args: dict, result: dict) -> dict:
         "healed_steps": healed_steps,
         "screenshot": result.get("screenshot"),
     }
+    if result.get("error_code") == "invalid_arguments":
+        record["error_code"] = "invalid_arguments"
+        record["error"] = result.get("error")
 
     AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with AUDIT_PATH.open("a", encoding="utf-8") as audit_file:

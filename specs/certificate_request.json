@@ -1,0 +1,76 @@
+{
+  "name": "certificate_request",
+  "description": "Submits a certificate request by providing a reason and selecting a certificate type.",
+  "base_url": "http://localhost:5000",
+  "params": {
+    "reason": {
+      "type": "string",
+      "description": "Reason for the certificate request",
+      "enum": null,
+      "required": true
+    },
+    "cert_type": {
+      "type": "string",
+      "description": "Type of certificate to request",
+      "enum": ["Bonafide", "No Dues", "Character"],
+      "required": true
+    }
+  },
+  "steps": [
+    {
+      "action": "goto",
+      "description": "Open the certificate request page",
+      "selectors": [],
+      "value": "/certificate",
+      "extract_as": null,
+      "save_as": null
+    },
+    {
+      "action": "fill",
+      "description": "Fill Reason",
+      "selectors": [
+        "#reason",
+        "role=textbox[name=\"Reason\"]",
+        "textarea[name=\"reason\"]",
+        "textarea"
+      ],
+      "value": "{reason}",
+      "extract_as": null,
+      "save_as": null
+    },
+    {
+      "action": "select",
+      "description": "Choose Certificate Type",
+      "selectors": [
+        "#cert-type",
+        "role=combobox[name=\"Certificate Type\"]",
+        "select[name=\"cert_type\"]",
+        "select"
+      ],
+      "value": "{cert_type}",
+      "extract_as": null,
+      "save_as": null
+    },
+    {
+      "action": "click",
+      "description": "Click Submit Request",
+      "selectors": [
+        "#send-btn",
+        "role=button[name=\"Submit Request\"]",
+        "text=\"Submit Request\"",
+        "button[type=\"submit\"]",
+        "button"
+      ],
+      "value": null,
+      "extract_as": null,
+      "save_as": null
+    }
+  ],
+  "success_check": {
+    "type": "text_visible",
+    "value": "Request submitted"
+  },
+  "outputs": [],
+  "irreversible": true,
+  "approved": true
+}

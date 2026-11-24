@@ -230,7 +230,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
     validation_error = _validate_args(spec, args)
     if validation_error:
         _log(f"FAILED: {validation_error}")
-        result = _error(validation_error)
+        result = _error(validation_error, error_code="invalid_arguments")
         tool_name = spec.name if isinstance(spec, ToolSpec) else "unknown"
         log_run(tool_name, args, result)
         return result
