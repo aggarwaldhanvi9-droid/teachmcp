@@ -10,6 +10,10 @@ from typing import Any, Sequence
 from playwright.sync_api import BrowserContext, Playwright, sync_playwright
 
 
+def _log(message: str) -> None:
+    print(f"[RECORDER] {message}", flush=True)
+
+
 RECORDER_SCRIPT = r"""
 (() => {
   const escapeAttribute = (value) => value
@@ -332,24 +336,37 @@ def run_recorder(url: str, output: Path, playwright: Playwright) -> int:
             ) + 1
             step["save_as"] = f"extracted_{payload['extract_as']}_{extract_number}"
         captured_steps.append(step)
-        print(f"Recorded {action}: {step['description']}")
+        selector = selectors[0]
+        if action == "click":
+            _log(f"Click captured: {selector}")
+        elif action in {"fill", "select"}:
+            _log(f"Input captured: {selector}")
+        else:
+            _log(f"Extract captured: {selector}")
 
     browser = playwright.chromium.launch(headless=False)
+    _log("Browser launched")
     context: BrowserContext = browser.new_context()
     context.expose_binding("__teachmcpRecord", record_event)
     context.add_init_script(RECORDER_SCRIPT)
     page = context.new_page()
 
+    def log_navigation(frame) -> None:
+        if frame == page.main_frame:
+            _log(f"Navigation detected: {frame.url}")
+
+    page.on("framenavigated", log_navigation)
+
     try:
         page.goto(url)
-        print("Recording in Chromium. Use Ctrl+Shift+E, then click to extract.")
-        print("Close the browser window to save the recording.")
+        _log("Recording in Chromium. Use Ctrl+Shift+E, then click to extract.")
+        _log("Close the browser window to save the recording.")
         while context.pages:
             context.pages[0].wait_for_timeout(250)
     finally:
         browser.close()
         save_recording(output, build_recording(url, captured_steps))
-        print(f"Saved {len(captured_steps)} action(s) to {output}")
+        _log(f"Recording saved successfully: {output}")
 
     return 0
 
