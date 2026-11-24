@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import time
 import json
 from pathlib import Path
@@ -13,6 +14,10 @@ from playwright.sync_api import sync_playwright
 from models import ToolSpec, fill_value
 from verify import verify
 from audit import log_run
+
+
+def _log(message: str) -> None:
+    print(f"[RUNNER] {message}", file=sys.stderr, flush=True)
 
 
 def _log_result(spec: ToolSpec, args: dict, result: dict) -> dict:
@@ -206,7 +211,7 @@ def _extract_table(locator) -> list[dict]:
 
 
 def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
-             dry_run: bool = False, headless: bool = True) -> dict:
+             dry_run: bool = False, headless: bool | None = None) -> dict:
     """Execute or plan a ToolSpec and return a serializable result."""
     try:
         if isinstance(spec, dict):
@@ -216,10 +221,15 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
     except Exception as exc:
         return _error(f"Invalid spec: {exc}")
 
+    if headless is None:
+        headless = os.environ.get("TEACHMCP_HEADLESS") == "1"
+    _log(f"Starting workflow: {spec.name}")
+
     if args is None:
         args = {}
     validation_error = _validate_args(spec, args)
     if validation_error:
+        _log(f"FAILED: {validation_error}")
         result = _error(validation_error)
         tool_name = spec.name if isinstance(spec, ToolSpec) else "unknown"
         log_run(tool_name, args, result)
@@ -235,6 +245,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
     }
 
     if spec.irreversible and not confirmed:
+        _log("Waiting for explicit approval before running this workflow")
         base_result["status"] = "needs_approval"
         base_result["summary"] = spec.plain_english()
         base_result["args"] = args
@@ -264,6 +275,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
         planned_steps.append(planned)
 
     if dry_run:
+        _log(f"Dry run completed: {len(planned_steps)} step(s) planned")
         base_result["status"] = "verified"
         base_result["steps"] = planned_steps
         base_result["evidence"] = {"dry_run": True}
@@ -277,24 +289,42 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
     context = None
     browser = None
     p = None
+    slow_mo = 600 if headless else 1800
     outputs: dict[str, Any] = {}
     step_results: list[dict] = []
 
     try:
         p = sync_playwright().start()
         profile = os.environ.get("TEACHMCP_PROFILE")
+        _log(
+            "Launching Chromium "
+            f"(headless={headless}, slow_mo={slow_mo} ms)"
+        )
         if profile:
             context = p.chromium.launch_persistent_context(
                 profile,
                 headless=headless,
+                slow_mo=slow_mo,
+                viewport={"width": 1280, "height": 800},
             )
             page = context.pages[0] if context.pages else context.new_page()
         else:
-            browser = p.chromium.launch(headless=headless)
-            context = browser.new_context()
+            browser = p.chromium.launch(headless=headless, slow_mo=slow_mo)
+            context = browser.new_context(viewport={"width": 1280, "height": 800})
             page = context.new_page()
 
         for index, step in enumerate(spec.steps, 1):
+            if step.selectors:
+                step_target = step.selectors[0]
+            elif step.action == "goto":
+                step_target = "navigation"
+            else:
+                step_target = ""
+            target_suffix = f" ({step_target})" if step_target else ""
+            _log(
+                f"Step {index}/{len(spec.steps)}: "
+                f"{step.description}{target_suffix}"
+            )
             step_result = {
                 "index": index,
                 "action": step.action,
@@ -312,6 +342,8 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                     locator, selector_used, healed = _find_element(page, step.selectors)
                     step_result["selector_used"] = selector_used
                     step_result["healed"] = healed
+                    if healed:
+                        _log(f"Selector fallback matched: {selector_used}")
 
                     if step.action == "click":
                         locator.click()
@@ -328,6 +360,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                         outputs[step.save_as] = value
                         step_result["value"] = value
             except Exception as exc:
+                _log(f"FAILED at step {index}: {exc}")
                 step_result["status"] = "failed"
                 step_result["error"] = str(exc)
                 step_results.append(step_result)
@@ -370,8 +403,12 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
         base_result["status"] = "verified" if passed else "failed"
         if not passed:
             base_result["failed_step"] = "success_check"
+            _log("FAILED: success check did not pass")
+        else:
+            _log(f"Workflow succeeded: {spec.name}")
         return _log_result(spec, args, base_result)
     except Exception as exc:
+        _log(f"FAILED: {exc}")
         base_result["status"] = "error"
         base_result["outputs"] = outputs
         base_result["steps"] = step_results
@@ -386,6 +423,8 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                 pass
         return _log_result(spec, args, base_result)
     finally:
+        if not headless and page and not page.is_closed():
+            page.wait_for_timeout(1500)
         if context:
             context.close()
         elif browser:
