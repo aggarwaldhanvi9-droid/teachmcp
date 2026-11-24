@@ -18,6 +18,16 @@ playwright install chromium
 python models.py        # validates every spec in specs/
 ```
 
+## Review pending specs
+From the repository root (`MCP_Whackiest`), run:
+```
+.\teachmcp\.venv\Scripts\python.exe .\teachmcp\review.py
+```
+Or change into `teachmcp` first and run:
+```
+.\.venv\Scripts\python.exe review.py
+```
+
 ## Portal contract (Person A must build exactly this)
 Person B's runner and the example specs depend on these IDs. Rename nothing without telling B.
 

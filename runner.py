@@ -8,6 +8,14 @@ import json
 from pathlib import Path
 from typing import Any
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*args: Any, **kwargs: Any) -> bool:
+        return False
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 

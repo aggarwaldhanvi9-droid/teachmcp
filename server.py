@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+from typing import Any
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*args: Any, **kwargs: Any) -> bool:
+        return False
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 import asyncio
 import inspect
-from pathlib import Path
-from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
