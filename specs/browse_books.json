@@ -1,0 +1,45 @@
+{
+  "name": "browse_books",
+  "description": "Opens a requested category on Books to Scrape and returns the book titles and prices.",
+  "base_url": "https://books.toscrape.com",
+  "params": {
+    "category": {
+      "type": "string",
+      "description": "Name of the book category to browse",
+      "required": true
+    }
+  },
+  "steps": [
+    {
+      "action": "goto",
+      "description": "Open Books to Scrape",
+      "value": "/"
+    },
+    {
+      "action": "click",
+      "description": "Open the requested category",
+      "selectors": [
+        "role=link[name=\"{category}\"]",
+        "text=\"{category}\"",
+        "a"
+      ]
+    },
+    {
+      "action": "extract",
+      "description": "Extract book titles and prices from the category cards",
+      "selectors": [
+        "div.col-sm-8.col-md-9",
+        "ol.row"
+      ],
+      "extract_as": "table",
+      "save_as": "books"
+    }
+  ],
+  "success_check": {
+    "type": "text_visible",
+    "value": "{category}"
+  },
+  "outputs": ["books"],
+  "irreversible": false,
+  "approved": true
+}

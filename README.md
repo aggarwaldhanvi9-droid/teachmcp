@@ -51,6 +51,9 @@ For the approved `certificate_request` workflow, pass `cert_type` and `reason`. 
 - **Failed verification:** run `pytest tests\test_runner.py::test_failed_success_check_captures_screenshot_and_audit`; it checks the failed status, screenshot, and audit entry.
 - **Decline:** after `needs_approval`, call with `declined=true`; the result is `declined` and no browser actions run.
 
+## Browse books example
+`specs/browse_books.json` uses `extract_as: "table"` for the Books to Scrape card list and returns `books` as dictionaries with `title` and `price`. Existing table extraction remains header-keyed; `extract_as: "text"` returns the selected element's text as a single string.
+
 ## Ownership
 - **Person A:** demo_portal, recorder, generator, review step (uses `ToolSpec.plain_english()`)
 - **Person B:** runner, verification, MCP server (uses `ToolSpec.mcp_input_schema()`), approval, audit log

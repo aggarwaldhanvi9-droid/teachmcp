@@ -49,9 +49,24 @@ and replacing fill/select values with `{parameter_name}` placeholders. Never
 copy literal values from a filled field into the resulting spec. For fields
 that appear to contain passwords, tokens, or other credentials, use a
 placeholder and never include a credential value.
+When a recording clicks a navigation link, filter, category, or item within a
+list or sidebar, treat its recorded label as an example value, not a fixed
+target. Create a required string parameter for that choice (use `category` for
+book categories), and do not hardcode the label in the tool name, click
+selectors, or success check. Put `{category}` in matching selectors and
+category-navigation checks, for example
+`role=link[name="{category}"]`, `text="{category}"`, `a`, and
+`{"type":"text_visible","value":"{category}"}`. Name reusable tools for the
+task rather than the recorded choice, such as `browse_books` instead of
+`scrape_mystery_books`.
 Use selectors in their recorded order. Keep only actions present in the
 recording, including its initial goto and any extract steps. Derive a useful
 success_check and outputs from the recorded extraction and example.
+When an extraction targets a container with repeated product or item cards,
+combine it into one `extract_as: "table"` step that returns structured
+`title`/`price` rows (save as `books`, or `items` for other records). Use the
+card-list container selector, such as `div.col-sm-8.col-md-9` or `ol.row`;
+do not also extract a parent section as duplicate raw text.
 The example's approval state is not transferable: every generated spec must
 have `approved` set to false.
 """

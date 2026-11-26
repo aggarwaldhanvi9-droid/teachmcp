@@ -88,6 +88,32 @@ def test_extract_table_preserves_header_case_under_css_transform():
     assert rows == [{"Subject": "Physics", "Percentage": "70%"}]
 
 
+def test_extract_table_returns_book_cards_as_title_price_rows():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(
+            """<ol class="row">
+                 <li><article class="product_pod">
+                   <h3><a title="Sharp Objects">Sharp Objects</a></h3>
+                   <p class="price_color">&#163;47.82</p>
+                 </article></li>
+                 <li><article class="product_pod">
+                   <h3><a title="In a Dark, Dark Wood">In a Dark, Dark ...</a></h3>
+                   <p class="price_color">&#163;19.63</p>
+                 </article></li>
+               </ol>"""
+        )
+
+        books = _extract_table(page.locator("ol.row"))
+        browser.close()
+
+    assert books == [
+        {"title": "Sharp Objects", "price": "\u00a347.82"},
+        {"title": "In a Dark, Dark Wood", "price": "\u00a319.63"},
+    ]
+
+
 def test_select_option_prefers_visible_label_and_falls_back_to_value():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -106,6 +132,44 @@ def test_select_option_prefers_visible_label_and_falls_back_to_value():
         assert page.locator("#by-label").input_value() == "bonafide"
         assert page.locator("#by-value").input_value() == "Bonafide"
         browser.close()
+
+
+def test_category_placeholder_is_resolved_in_selector_and_success_check():
+    spec = {
+        "name": "check_category_placeholder",
+        "description": "Check dynamic placeholder resolution",
+        "base_url": "http://127.0.0.1:5000",
+        "params": {
+            "category": {
+                "type": "string",
+                "description": "Text to find",
+                "required": True,
+            }
+        },
+        "steps": [
+            {
+                "action": "goto",
+                "description": "Open attendance",
+                "value": "/attendance",
+            },
+            {
+                "action": "click",
+                "description": "Click the requested text",
+                "selectors": ['text="{category}"'],
+            },
+        ],
+        "success_check": {
+            "type": "text_visible",
+            "value": "{category}",
+        },
+        "outputs": [],
+    }
+
+    result = run_spec(spec, {"category": "Mathematics"}, headless=True)
+
+    assert result["status"] == "verified"
+    assert result["steps"][1]["selector_used"] == 'text="Mathematics"'
+    assert result["evidence"]["success_check"]["value"] == "Mathematics"
 
 
 def test_approval_required():

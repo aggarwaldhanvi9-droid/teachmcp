@@ -19,7 +19,7 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
-from models import ToolSpec, fill_value
+from models import SuccessCheck, ToolSpec, fill_value
 from verify import verify
 from audit import log_run
 
@@ -215,7 +215,23 @@ def _extract_table(locator) -> list[dict]:
         values = [(cell.text_content() or "").strip() for cell in cells]
         if values:
             table.append({header: values[i] if i < len(values) else "" for i, header in enumerate(headers)})
-    return table
+    if table:
+        return table
+
+    cards = locator.locator("article.product_pod").all()
+    books = []
+    for card in cards:
+        title_link = card.locator("h3 a").first
+        price_label = card.locator(".price_color").first
+        title = (
+            title_link.get_attribute("title")
+            or (title_link.text_content() or "").strip()
+        )
+        price = (price_label.text_content() or "").strip()
+        if not title or not price:
+            raise RuntimeError("Book card is missing its title or price")
+        books.append({"title": title, "price": price})
+    return books
 
 
 def _select_option(locator: Any, option: str) -> str:
@@ -356,8 +372,11 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
         page.bring_to_front()
 
         for index, step in enumerate(spec.steps, 1):
-            if step.selectors:
-                step_target = step.selectors[0]
+            selectors = [
+                fill_value(selector, args) or "" for selector in step.selectors
+            ]
+            if selectors:
+                step_target = selectors[0]
             elif step.action == "goto":
                 step_target = "navigation"
             else:
@@ -381,7 +400,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                     page.goto(url, wait_until="domcontentloaded")
                     step_result["url"] = page.url
                 elif step.action in ("click", "fill", "select", "extract"):
-                    locator, selector_used, healed = _find_element(page, step.selectors)
+                    locator, selector_used, healed = _find_element(page, selectors)
                     step_result["selector_used"] = selector_used
                     step_result["healed"] = healed
                     if healed:
@@ -421,7 +440,7 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                 base_result["failed_step"] = index
                 base_result["steps"] = step_results
                 base_result["outputs"] = {name: outputs[name] for name in spec.outputs if name in outputs}
-                failed_selectors = step.selectors if step.action in ("click", "fill", "select", "extract") else []
+                failed_selectors = selectors if step.action in ("click", "fill", "select", "extract") else []
                 dom_snippet = _interactive_dom(page) if page else ""
                 base_result["evidence"] = {
                     "url": page.url,
@@ -438,7 +457,12 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
             step_results.append(step_result)
 
         returned_outputs = {name: outputs[name] for name in spec.outputs if name in outputs}
-        passed, verification_evidence = verify(spec.success_check, page, outputs)
+        success_check = spec.success_check.model_copy(
+            update={
+                "value": fill_value(spec.success_check.value, args) or ""
+            },
+        )
+        passed, verification_evidence = verify(success_check, page, outputs)
         if not headless:
             page.wait_for_timeout(3000)
         base_result["outputs"] = returned_outputs
@@ -447,8 +471,8 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
             "url": page.url,
             "title": page.title(),
             "success_check": {
-                "type": spec.success_check.type,
-                "value": spec.success_check.value,
+                "type": success_check.type,
+                "value": success_check.value,
                 "passed": passed,
                 "evidence": verification_evidence,
             },
