@@ -202,7 +202,7 @@ def _extract_table(locator) -> list[dict]:
     header_cells = locator.locator("thead tr th").all()
     if not header_cells:
         header_cells = locator.locator("tr").first.locator("th, td").all()
-    headers = [cell.inner_text().strip() for cell in header_cells]
+    headers = [(cell.text_content() or "").strip() for cell in header_cells]
 
     rows = locator.locator("tbody tr").all()
     if not rows:
@@ -212,7 +212,7 @@ def _extract_table(locator) -> list[dict]:
     table = []
     for row in rows:
         cells = row.locator("th, td").all()
-        values = [cell.inner_text().strip() for cell in cells]
+        values = [(cell.text_content() or "").strip() for cell in cells]
         if values:
             table.append({header: values[i] if i < len(values) else "" for i, header in enumerate(headers)})
     return table

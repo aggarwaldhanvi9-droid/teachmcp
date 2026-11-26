@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 from models import load_spec
-from runner import run_spec
+from runner import _extract_table, run_spec
 
 
 ROOT = Path(__file__).parent.parent
@@ -67,6 +67,24 @@ def test_dry_run_no_browser():
     assert result["evidence"]["dry_run"] is True
     assert len(result["steps"]) == 2
     assert result["screenshot"] is None
+
+
+def test_extract_table_preserves_header_case_under_css_transform():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(
+            """<style>th { text-transform: uppercase; }</style>
+            <table id="attendance-table">
+              <thead><tr><th>Subject</th><th>Percentage</th></tr></thead>
+              <tbody><tr><td>Physics</td><td>70%</td></tr></tbody>
+            </table>"""
+        )
+
+        rows = _extract_table(page.locator("#attendance-table"))
+        browser.close()
+
+    assert rows == [{"Subject": "Physics", "Percentage": "70%"}]
 
 
 def test_approval_required():
