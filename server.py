@@ -59,6 +59,7 @@ async def run_workflow(
     name: str,
     params: dict[str, Any] | None = None,
     confirmed: bool = False,
+    declined: bool = False,
 ) -> dict:
     """Run an approved workflow by name."""
     spec = SPEC_BY_NAME.get(name)
@@ -73,7 +74,7 @@ async def run_workflow(
             "failed_step": None,
         }
     return await asyncio.to_thread(
-        run_spec, spec, params or {}, confirmed=confirmed
+        run_spec, spec, params or {}, confirmed=confirmed, declined=declined
     )
 
 
@@ -91,7 +92,10 @@ def _register_workflow_tool(spec) -> None:
 
     async def workflow(**kwargs):
         confirmed = bool(kwargs.pop("confirmed", False))
-        return await run_workflow(spec.name, kwargs, confirmed=confirmed)
+        declined = bool(kwargs.pop("declined", False))
+        return await run_workflow(
+            spec.name, kwargs, confirmed=confirmed, declined=declined
+        )
 
     signature_parameters = []
     annotations = {}
@@ -117,7 +121,16 @@ def _register_workflow_tool(spec) -> None:
             annotation=bool,
         )
     )
+    signature_parameters.append(
+        inspect.Parameter(
+            "declined",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=False,
+            annotation=bool,
+        )
+    )
     annotations["confirmed"] = bool
+    annotations["declined"] = bool
     annotations["return"] = dict[str, Any]
     workflow.__annotations__ = annotations
     workflow.__signature__ = inspect.Signature(
@@ -129,7 +142,8 @@ def _register_workflow_tool(spec) -> None:
         description += (
             "\n\nThis workflow is irreversible. Present the returned `needs_approval` "
             "summary to the user, obtain explicit consent, and only re-call this tool "
-            "with `confirmed=true` after that consent."
+            "with `confirmed=true` after that consent. If the user declines, call "
+            "with `declined=true` so the result is recorded without running the workflow."
         )
 
     tool = mcp._tool_manager.add_tool(
@@ -142,6 +156,11 @@ def _register_workflow_tool(spec) -> None:
     input_schema["properties"]["confirmed"] = {
         "type": "boolean",
         "description": "Set true only after the user explicitly approves this irreversible workflow.",
+        "default": False,
+    }
+    input_schema["properties"]["declined"] = {
+        "type": "boolean",
+        "description": "Set true if the user declines this workflow; no browser actions will run.",
         "default": False,
     }
     if "required" not in input_schema:

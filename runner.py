@@ -218,8 +218,25 @@ def _extract_table(locator) -> list[dict]:
     return table
 
 
+def _select_option(locator: Any, option: str) -> str:
+    try:
+        locator.select_option(label=option)
+        return "label"
+    except Exception as label_error:
+        _log("Option label was not found; retrying selection by value")
+        try:
+            locator.select_option(value=option)
+            return "value"
+        except Exception as value_error:
+            raise RuntimeError(
+                f"Could not select {option!r} by label ({label_error}) "
+                f"or value ({value_error})"
+            ) from value_error
+
+
 def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
-             dry_run: bool = False, headless: bool | None = None) -> dict:
+             dry_run: bool = False, headless: bool | None = None,
+             declined: bool = False) -> dict:
     """Execute or plan a ToolSpec and return a serializable result."""
     try:
         if isinstance(spec, dict):
@@ -232,6 +249,22 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
     if headless is None:
         headless = os.environ.get("TEACHMCP_HEADLESS") == "1"
     _log(f"Starting workflow: {spec.name}")
+
+    if declined:
+        _log("Workflow declined; no browser actions were run")
+        return _log_result(
+            spec,
+            args if isinstance(args, dict) else {},
+            {
+                "status": "declined",
+                "message": "User declined this workflow; no browser actions were run.",
+                "outputs": {},
+                "steps": [],
+                "evidence": {"execution_started": False},
+                "screenshot": None,
+                "failed_step": None,
+            },
+        )
 
     if args is None:
         args = {}
@@ -368,7 +401,10 @@ def run_spec(spec: ToolSpec | dict, args: dict, confirmed: bool = False,
                     elif step.action == "fill":
                         locator.fill(fill_value(step.value, args) or "")
                     elif step.action == "select":
-                        locator.select_option(value=fill_value(step.value, args) or "")
+                        selected_by = _select_option(
+                            locator, fill_value(step.value, args) or ""
+                        )
+                        _log(f"Selected option using {selected_by}")
                     elif step.action == "extract":
                         if step.extract_as == "text":
                             value = locator.inner_text().strip()

@@ -58,19 +58,22 @@ def test_certificate_click_self_heals(modified_portal, tmp_path, monkeypatch):
     audit_path = tmp_path / "runs" / "audit.jsonl"
     monkeypatch.setattr("audit.AUDIT_PATH", audit_path)
 
-    spec = load_spec("specs/request_certificate.json")
+    spec = load_spec("specs/certificate_request.json")
     spec.base_url = modified_portal
 
     result = run_spec(
         spec,
-        {"certificate_type": "Bonafide", "reason": "scholarship application"},
+        {"cert_type": "Bonafide", "reason": "scholarship application"},
         confirmed=True,
         headless=True,
     )
 
     assert result["status"] == "verified"
     click_step = next(step for step in result["steps"] if step["action"] == "click")
-    assert click_step["selector_used"] in ("button[type=submit]", "text=Submit Request")
+    assert click_step["selector_used"] in (
+        'button[type="submit"]',
+        "text=Submit Request",
+    )
     assert click_step["healed"] is True
 
     assert audit_path.exists()
@@ -80,7 +83,7 @@ def test_certificate_click_self_heals(modified_portal, tmp_path, monkeypatch):
         if line.strip()
     ]
     latest = records[-1]
-    assert latest["tool"] == "request_certificate"
+    assert latest["tool"] == "certificate_request"
     assert any("Click Submit Request" in step or "button" in step.lower() for step in latest["healed_steps"])
 
 

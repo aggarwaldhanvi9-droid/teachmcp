@@ -37,6 +37,11 @@ def test_dynamic_tool_schemas_match_spec():
             "description": "Set true only after the user explicitly approves this irreversible workflow.",
             "default": False,
         }
+        expected["properties"]["declined"] = {
+            "type": "boolean",
+            "description": "Set true if the user declines this workflow; no browser actions will run.",
+            "default": False,
+        }
         assert tools[spec.name].parameters == expected
 
 
@@ -51,13 +56,17 @@ def test_dynamic_tool_accepts_named_mcp_arguments(monkeypatch):
         "certificate_type",
         "reason",
         "confirmed",
+        "declined",
     ]
     assert signature.parameters["confirmed"].default is False
+    assert signature.parameters["declined"].default is False
 
     received = {}
 
-    async def fake_run_workflow(name, params, confirmed=False):
-        received.update(name=name, params=params, confirmed=confirmed)
+    async def fake_run_workflow(name, params, confirmed=False, declined=False):
+        received.update(
+            name=name, params=params, confirmed=confirmed, declined=declined
+        )
         return {"status": "needs_approval"}
 
     monkeypatch.setattr(server, "run_workflow", fake_run_workflow)
@@ -67,6 +76,7 @@ def test_dynamic_tool_accepts_named_mcp_arguments(monkeypatch):
                 "certificate_type": "Bonafide",
                 "reason": "scholarship",
                 "confirmed": True,
+                "declined": False,
             }
         )
     )
@@ -79,6 +89,7 @@ def test_dynamic_tool_accepts_named_mcp_arguments(monkeypatch):
             "reason": "scholarship",
         },
         "confirmed": True,
+        "declined": False,
     }
 
 
@@ -92,12 +103,35 @@ def test_irreversible_requires_confirmation(monkeypatch):
 
     event_loop_thread = threading.get_ident()
 
-    def fake_run_spec(received_spec, received_args, confirmed=False, dry_run=False, headless=True):
+    def fake_run_spec(
+        received_spec, received_args, confirmed=False, dry_run=False,
+        headless=True, declined=False
+    ):
         assert received_spec is spec
         assert confirmed is True
+        assert declined is False
         assert threading.get_ident() != event_loop_thread
         return {"status": "verified", "outputs": {"reference_number": "CERT-1001"}}
 
     monkeypatch.setattr("server.run_spec", fake_run_spec)
     result = asyncio.run(run_workflow(spec.name, params, confirmed=True))
     assert result["status"] == "verified"
+
+
+def test_declined_workflow_is_forwarded_without_confirmation(monkeypatch):
+    spec = SPEC_BY_NAME["request_certificate"]
+    received = {}
+
+    def fake_run_spec(received_spec, received_args, **kwargs):
+        received.update(spec=received_spec, args=received_args, kwargs=kwargs)
+        return {"status": "declined"}
+
+    monkeypatch.setattr("server.run_spec", fake_run_spec)
+    result = asyncio.run(run_workflow(spec.name, {}, declined=True))
+
+    assert result["status"] == "declined"
+    assert received == {
+        "spec": spec,
+        "args": {},
+        "kwargs": {"confirmed": False, "declined": True},
+    }

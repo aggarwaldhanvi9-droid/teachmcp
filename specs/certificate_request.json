@@ -55,11 +55,11 @@
       "action": "click",
       "description": "Click Submit Request",
       "selectors": [
-        "#send-btn",
-        "role=button[name=\"Submit Request\"]",
-        "text=\"Submit Request\"",
+        "#submit-btn",
         "button[type=\"submit\"]",
-        "button"
+        "text=\"Submit Request\"",
+        "role=button[name=\"Submit Request\"]",
+        "#send-btn"
       ],
       "value": null,
       "extract_as": null,

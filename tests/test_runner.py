@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 import time
@@ -7,7 +8,7 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 from models import load_spec
-from runner import _extract_table, run_spec
+from runner import _extract_table, _select_option, run_spec
 
 
 ROOT = Path(__file__).parent.parent
@@ -87,6 +88,26 @@ def test_extract_table_preserves_header_case_under_css_transform():
     assert rows == [{"Subject": "Physics", "Percentage": "70%"}]
 
 
+def test_select_option_prefers_visible_label_and_falls_back_to_value():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(
+            """<select id="by-label">
+                 <option value="bonafide">Bonafide</option>
+               </select>
+               <select id="by-value">
+                 <option value="Bonafide">Bonafide Certificate</option>
+               </select>"""
+        )
+
+        assert _select_option(page.locator("#by-label"), "Bonafide") == "label"
+        assert _select_option(page.locator("#by-value"), "Bonafide") == "value"
+        assert page.locator("#by-label").input_value() == "bonafide"
+        assert page.locator("#by-value").input_value() == "Bonafide"
+        browser.close()
+
+
 def test_approval_required():
     spec = load_spec(ROOT / "specs" / "request_certificate.json")
     spec.base_url = "http://127.0.0.1:5000"
@@ -111,3 +132,52 @@ def test_certificate_verified():
     )
     assert result["status"] == "verified"
     assert result["outputs"]["reference_number"].startswith("CERT-")
+
+
+def test_declined_irreversible_workflow_is_audited_without_browser(
+    tmp_path, monkeypatch
+):
+    import audit
+    import runner
+
+    spec = load_spec(ROOT / "specs" / "certificate_request.json")
+    audit_path = tmp_path / "runs" / "audit.jsonl"
+    monkeypatch.setattr(audit, "AUDIT_PATH", audit_path)
+    monkeypatch.setattr(
+        runner,
+        "sync_playwright",
+        lambda: pytest.fail("declined workflow must not start Playwright"),
+    )
+
+    result = run_spec(spec, {}, declined=True)
+
+    assert result["status"] == "declined"
+    assert result["screenshot"] is None
+    assert result["steps"] == []
+    assert result["evidence"]["execution_started"] is False
+    record = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert record["status"] == "declined"
+
+
+def test_failed_success_check_captures_screenshot_and_audit(
+    tmp_path, monkeypatch
+):
+    import audit
+
+    monkeypatch.chdir(tmp_path)
+    audit_path = tmp_path / "runs" / "audit.jsonl"
+    monkeypatch.setattr(audit, "AUDIT_PATH", audit_path)
+
+    spec = load_spec(ROOT / "specs" / "check_attendance.json")
+    spec.base_url = "http://127.0.0.1:5000"
+    spec.success_check.value = "Text that is not present"
+
+    result = run_spec(spec, {}, headless=True)
+
+    assert result["status"] == "failed"
+    assert result["failed_step"] == "success_check"
+    assert result["screenshot"]
+    assert (tmp_path / result["screenshot"]).is_file()
+    record = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert record["status"] == "failed"
+    assert record["screenshot"] == result["screenshot"]

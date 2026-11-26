@@ -1,9 +1,10 @@
 from itertools import count
 
-from flask import Flask, render_template_string, request
+from flask import Flask, jsonify, render_template_string, request
 
 app = Flask(__name__)
 reference_numbers = count(1001)
+broken_submit_button = False
 
 
 BASE_LAYOUT = """<!doctype html>
@@ -435,9 +436,20 @@ def attendance():
 
 @app.get("/certificate")
 def certificate_form():
-    button_id = "send-btn" if request.args.get("variant") == "broken" else "submit-btn"
+    is_broken = request.args.get("variant") == "broken" or broken_submit_button
+    button_id = "send-btn" if is_broken else "submit-btn"
     content = render_template_string(CERTIFICATE_FORM, button_id=button_id)
     return _render_page("Certificate Request", "certificates", content, "narrow")
+
+
+@app.post("/__demo/toggle-broken")
+def toggle_broken_button():
+    global broken_submit_button
+    broken_submit_button = not broken_submit_button
+    return jsonify(
+        broken=broken_submit_button,
+        button_id="send-btn" if broken_submit_button else "submit-btn",
+    )
 
 
 @app.post("/certificate")

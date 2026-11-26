@@ -39,6 +39,18 @@ Person B's runner and the example specs depend on these IDs. Rename nothing with
 
 Self-healing demo: change the button to `<button id="send-btn" type="submit">Submit Request</button>`. The first selector fails, and `button[type=submit]` or `text=Submit Request` should recover it.
 
+Portal button toggle (while the demo app is running):
+```
+Invoke-RestMethod -Method Post -Uri http://localhost:5000/__demo/toggle-broken
+```
+`GET /certificate?variant=broken` still forces `send-btn`, regardless of the toggle.
+
+For the approved `certificate_request` workflow, pass `cert_type` and `reason`. The first call returns `needs_approval`; after user consent, call again with `confirmed=true`. To exercise the scenarios:
+- **Selection and approval:** choose `Bonafide` and confirm; the runner selects by visible label first.
+- **Self-healing:** toggle the portal to broken mode, confirm the request, then check `runs\audit.jsonl` for a non-empty `healed_steps`.
+- **Failed verification:** run `pytest tests\test_runner.py::test_failed_success_check_captures_screenshot_and_audit`; it checks the failed status, screenshot, and audit entry.
+- **Decline:** after `needs_approval`, call with `declined=true`; the result is `declined` and no browser actions run.
+
 ## Ownership
 - **Person A:** demo_portal, recorder, generator, review step (uses `ToolSpec.plain_english()`)
 - **Person B:** runner, verification, MCP server (uses `ToolSpec.mcp_input_schema()`), approval, audit log
