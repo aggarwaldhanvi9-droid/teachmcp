@@ -452,6 +452,17 @@ def save_pending_spec(spec: ToolSpec) -> Path:
     return output
 
 
+def load_example_spec() -> dict[str, Any]:
+    if EXAMPLE_SPEC_PATH.exists():
+        return load_spec(EXAMPLE_SPEC_PATH).model_dump(mode="json")
+
+    spec_paths = sorted(EXAMPLE_SPEC_PATH.parent.glob("*.json"))
+    if spec_paths:
+        return load_spec(spec_paths[0]).model_dump(mode="json")
+
+    return ToolSpec.model_json_schema()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate a pending ToolSpec")
     parser.add_argument("recording", type=Path, help="Path to a recording JSON file")
@@ -459,7 +470,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     load_dotenv(ROOT / ".env")
     recording = load_recording(args.recording)
-    example_spec = load_spec(EXAMPLE_SPEC_PATH).model_dump(mode="json")
+    example_spec = load_example_spec()
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
     groq_api_key = os.environ.get("GROQ_API_KEY")
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
